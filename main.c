@@ -26,6 +26,33 @@ void logout(char* loggedInUsername);
 void aboutBank();
 void loggedInMenu(char* loggedInUsername);
 
+struct Session {
+    char token[100];
+    char username[30];
+    time_t timestamp;
+} currentSession;
+
+int isSessionValid(loggedInUsername) {
+    time_t now = time(NULL);
+    double seconds = difftime(now, currentSession.timestamp);
+
+    if (seconds < 20 && strlen(currentSession.token) > 0) {
+        return 1;
+    } else {
+        printf("Session expired. Please login again.\n");
+
+        memset(&currentSession, 0, sizeof(currentSession));
+        return 0;
+    }
+}
+
+void createSession(const char* username, const char* phone) {
+    snprintf(currentSession.token, sizeof(currentSession.token), "%s_%s_%ld", username, phone, time(NULL));
+    strcpy(currentSession.username, username);
+    currentSession.timestamp = time(NULL);
+    //printf("Session created.\n");
+}
+
 //register function starts here
 void registerUser() {
     FILE *file;
@@ -131,16 +158,18 @@ int loginUser(char* loggedInUsername) {
                   user.fullName, user.username, user.email, user.phone, user.accountNumber, user.address, user.nidNo, &user.balance, user.password) == 9) {
         if (strcmp(user.username, username) == 0 && strcmp(user.password, password) == 0) {
             strcpy(loggedInUsername, username);
+            createSession(username, user.phone); // Create a session after login
             fclose(file);
             printf("\nLogin Successful!\n");
             return 1;
         }
-    }
+                  }
 
     fclose(file);
     printf("Invalid username or password. Please try again.\n\n");
     return 0;
 }
+
 //register function ends here
 
 //logTransaction function starts here
@@ -164,6 +193,11 @@ void logTransaction(const char* username, const char* type, float amount) {
 
 //viewStatement function starts here
 void viewStatement(const char* username) {
+
+    if (!isSessionValid()) {
+        return;
+    }
+
     FILE *file = fopen("transactions.csv", "r");
     if (file == NULL) {
         printf("No transactions found.\n");
@@ -200,6 +234,10 @@ void viewStatement(const char* username) {
 
 //transferMoney function starts here
 void transferMoney(const char* senderUsername) {
+    if (!isSessionValid()) {
+        return;
+    }
+
     FILE *file, *tempFile;
     struct User user;
     char recipientAccountNo[15];
@@ -280,6 +318,10 @@ void transferMoney(const char* senderUsername) {
 
 //checkBalance function starts here
 void checkBalance(const char* username) {
+    if (!isSessionValid()) {
+        return;
+    }
+
     FILE *file;
     struct User user;
 
@@ -305,6 +347,10 @@ void checkBalance(const char* username) {
 
 // Deposit Money Function starts here
 void depositMoney(const char* username) {
+    if (!isSessionValid()) {
+        return;
+    }
+
     FILE *file;
     struct User user;
     float amount;
@@ -372,6 +418,10 @@ void depositMoney(const char* username) {
 
 //withdrawMoney function starts here
 void withdrawMoney(const char* username) {
+    if (!isSessionValid()) {
+        return;
+    }
+
     FILE *file;
     struct User user;
     float amount;
@@ -447,15 +497,24 @@ void withdrawMoney(const char* username) {
 
 //deleteAccount function starts here
 void deleteAccount(const char* username) {
+    if (!isSessionValid()) {
+        return;
+    }
+
     FILE *file, *tempFile;
     struct User user;
     int found = 0;
 
     file = fopen("users.csv", "r");
-    tempFile = fopen("temp.csv", "w");
+    if (file == NULL) {
+        printf("No users registered yet.\n");
+        return;
+    }
 
-    if (file == NULL || tempFile == NULL) {
-        printf("Error opening files!\n");
+    tempFile = fopen("temp.csv", "w");
+    if (tempFile == NULL) {
+        printf("Error opening temporary file!\n");
+        fclose(file);
         return;
     }
 
@@ -463,10 +522,15 @@ void deleteAccount(const char* username) {
                   user.fullName, user.username, user.email, user.phone, user.accountNumber, user.address, user.nidNo, &user.balance, user.password) == 9) {
         if (strcmp(user.username, username) == 0) {
             found = 1;
-        } else {
-            fprintf(tempFile, "%s,%s,%s,%s,%s,%s,%s,%.2f,%s\n", user.fullName, user.username, user.email, user.phone, user.accountNumber, user.address, user.nidNo, user.balance, user.password);
+            printf("Account for user %s deleted successfully.\n", username);
+            // Log the deletion as a transaction
+            logTransaction(username, "Account Deletion", 0);
+            continue; // Skip writing this user to temp file
         }
-    }
+        fprintf(tempFile, "%s,%s,%s,%s,%s,%s,%s,%.2f,%s\n",
+                user.fullName, user.username, user.email, user.phone,
+                user.accountNumber, user.address, user.nidNo, user.balance, user.password);
+                  }
 
     fclose(file);
     fclose(tempFile);
@@ -474,10 +538,9 @@ void deleteAccount(const char* username) {
     if (found) {
         remove("users.csv");
         rename("temp.csv", "users.csv");
-        printf("Account deleted successfully.\n");
     } else {
-        remove("temp.csv");
-        printf("Account not found.\n");
+        printf("User not found.\n");
+        remove("temp.csv"); // Cleanup
     }
 }
 //deleteAccount function ends here
@@ -485,15 +548,30 @@ void deleteAccount(const char* username) {
 //logout function starts here
 void logout(char* loggedInUsername) {
     strcpy(loggedInUsername, "");
+
+    strcpy(currentSession.username, "");
+    strcpy(currentSession.token, "");
+    currentSession.timestamp = 0;
+
     printf("You have logged out.\n");
 }
 //logout function ends here
 
 //aboutBank function starts here
 void aboutBank() {
-    printf("Bank Name: Fraud Bank PLC\n");
-    printf("Manager: Opi Sharma\n");
-    printf("Head Office: BUBT\n");
+    if (!isSessionValid()) {
+        return;
+    }
+    printf("Welcome to The Subtle Scam Bank Ltd.—where your money goes on\n");
+        printf("a little adventure,and we all pretend it’s just a game!\n");
+    printf("The Subtle Scam Bank Ltd. led by the ingenious Nur Quraishi and \n"
+           "a team of delightful tricksters, including Apurbo Devnath,\n"
+           "Refia Mosaref Dina, Ripon, Azmeri Akter Chadney, and Opi Chandra Sharma.\n"
+           "We specialize in turning banking into a whimsical adventure,\n"
+           "where your funds may take unexpected journeys, and surprises await\n"
+           "at every corner. Join us for a playful banking experience filled\n"
+           "with laughter and a dash of delightful deception!\n");
+
 }
 //aboutBank function ends here
 
@@ -553,6 +631,7 @@ int main() {
     int choice;
 
     do {
+        printf("\nWelcome to The Subtle Scam Bank Ltd.\n");
         printf("\n--- Main Menu ---\n");
         printf("1. Register\n2. Login\n3. Exit\n");
         printf("Enter your choice: ");
