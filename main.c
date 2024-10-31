@@ -36,7 +36,7 @@ int isSessionValid(loggedInUsername) {
     time_t now = time(NULL);
     double seconds = difftime(now, currentSession.timestamp);
 
-    if (seconds < 20 && strlen(currentSession.token) > 0) {
+    if (seconds < 500 && strlen(currentSession.token) > 0) {
         return 1;
     } else {
         printf("Session expired. Please login again.\n");
@@ -241,9 +241,12 @@ void transferMoney(const char* senderUsername) {
     FILE *file, *tempFile;
     struct User user;
     char recipientAccountNo[15];
+    char inputPassword[30];
     float amount;
     int senderFound = 0, recipientFound = 0;
 
+
+    // Ask for recipient account and amount
     printf("Enter recipient account number: ");
     fgets(recipientAccountNo, sizeof(recipientAccountNo), stdin);
     strtok(recipientAccountNo, "\n");
@@ -266,7 +269,6 @@ void transferMoney(const char* senderUsername) {
     while (fscanf(file, "%[^,],%[^,],%[^,],%[^,],%[^,],%[^,],%[^,],%f,%[^\n]\n",
                   user.fullName, user.username, user.email, user.phone, user.accountNumber, user.address, user.nidNo, &user.balance, user.password) == 9) {
         if (strcmp(user.username, senderUsername) == 0) {
-            senderFound = 1;
             if (amount > user.balance) {
                 printf("Insufficient balance for this transfer.\n");
                 fclose(file);
@@ -283,6 +285,38 @@ void transferMoney(const char* senderUsername) {
         return;
     }
 
+    // Password verification
+    printf("Enter your password to authorize the transfer: ");
+    fgets(inputPassword, sizeof(inputPassword), stdin);
+    strtok(inputPassword, "\n");
+
+    file = fopen("users.csv", "r");
+    if (file == NULL) {
+        printf("No users registered yet.\n");
+        return;
+    }
+
+    // Check if the password matches the sender's password
+    while (fscanf(file, "%[^,],%[^,],%[^,],%[^,],%[^,],%[^,],%[^,],%f,%[^\n]\n",
+                  user.fullName, user.username, user.email, user.phone, user.accountNumber, user.address, user.nidNo, &user.balance, user.password) == 9) {
+        if (strcmp(user.username, senderUsername) == 0) {
+            senderFound = 1;
+            if (strcmp(user.password, inputPassword) != 0) {
+                printf("Incorrect password. Transfer authorization failed.\n");
+                fclose(file);
+                return;
+            }
+            break;
+        }
+                  }
+    fclose(file);
+
+    if (!senderFound) {
+        printf("Sender not found.\n");
+        return;
+    }
+
+    // Open files again to perform transfer
     file = fopen("users.csv", "r");
     tempFile = fopen("temp.csv", "w");
     if (file == NULL || tempFile == NULL) {
@@ -313,6 +347,7 @@ void transferMoney(const char* senderUsername) {
     logTransaction(recipientAccountNo, "Transfer In", amount);
     printf("Transfer successful!\n");
 }
+
 //transferMoney function ends here
 
 
@@ -354,10 +389,22 @@ void depositMoney(const char* username) {
     FILE *file;
     struct User user;
     float amount;
+    char password[30];
 
     file = fopen("users.csv", "r+");
     if (file == NULL) {
         printf("No users registered yet.\n");
+        return;
+    }
+
+    // Prompt for deposit amount
+    printf("Enter amount to deposit: ");
+    scanf("%f", &amount);
+    getchar();
+
+    if (amount <= 0) {
+        printf("Amount should be greater than zero.\n");
+        fclose(file);
         return;
     }
 
@@ -366,15 +413,19 @@ void depositMoney(const char* username) {
                   user.fullName, user.username, user.email, user.phone, user.accountNumber, user.address, user.nidNo, &user.balance, user.password) == 9) {
         if (strcmp(user.username, username) == 0) {
             found = 1;
-            printf("Enter amount to deposit: ");
-            scanf("%f", &amount);
-            getchar();
 
-            if (amount <= 0) {
-                printf("Amount should be greater than zero.\n");
+            // Prompt for password verification
+            printf("Enter your password to proceed with the deposit: ");
+            fgets(password, sizeof(password), stdin);
+            strtok(password, "\n");
+
+            if (strcmp(user.password, password) != 0) {
+                printf("Incorrect password. Deposit cancelled.\n");
                 fclose(file);
                 return;
             }
+
+
 
             user.balance += amount;
 
@@ -385,10 +436,12 @@ void depositMoney(const char* username) {
                 return;
             }
 
+            // Write updated data to temp file
             fprintf(tempFile, "%s,%s,%s,%s,%s,%s,%s,%.2f,%s\n",
                 user.fullName, user.username, user.email, user.phone,
                 user.accountNumber, user.address, user.nidNo, user.balance, user.password);
 
+            // Copy remaining data from old file to temp file
             while (fscanf(file, "%[^,],%[^,],%[^,],%[^,],%[^,],%[^,],%[^,],%f,%[^\n]\n",
                           user.fullName, user.username, user.email, user.phone, user.accountNumber, user.address, user.nidNo, &user.balance, user.password) == 9) {
                 fprintf(tempFile, "%s,%s,%s,%s,%s,%s,%s,%.2f,%s\n",
@@ -413,6 +466,7 @@ void depositMoney(const char* username) {
         printf("User not found.\n");
     }
 }
+
 // Deposit Money Function ends here
 
 
@@ -425,6 +479,7 @@ void withdrawMoney(const char* username) {
     FILE *file;
     struct User user;
     float amount;
+    char password[30];
 
     file = fopen("users.csv", "r+");
     if (file == NULL) {
@@ -437,6 +492,19 @@ void withdrawMoney(const char* username) {
                   user.fullName, user.username, user.email, user.phone, user.accountNumber, user.address, user.nidNo, &user.balance, user.password) == 9) {
         if (strcmp(user.username, username) == 0) {
             found = 1;
+
+            // Prompt for password verification
+            printf("Enter your password to proceed with the withdrawal: ");
+            fgets(password, sizeof(password), stdin);
+            strtok(password, "\n");
+
+            if (strcmp(user.password, password) != 0) {
+                printf("Incorrect password. Withdrawal cancelled.\n");
+                fclose(file);
+                return;
+            }
+
+            // Show current balance and prompt for withdrawal amount
             printf("Current balance: %.2f\n", user.balance);
             printf("Enter amount to withdraw: ");
             scanf("%f", &amount);
@@ -463,10 +531,12 @@ void withdrawMoney(const char* username) {
                 return;
             }
 
+            // Write updated user data to temp file
             fprintf(tempFile, "%s,%s,%s,%s,%s,%s,%s,%.2f,%s\n",
                 user.fullName, user.username, user.email, user.phone,
                 user.accountNumber, user.address, user.nidNo, user.balance, user.password);
 
+            // Copy remaining users to temp file
             while (fscanf(file, "%[^,],%[^,],%[^,],%[^,],%[^,],%[^,],%[^,],%f,%[^\n]\n",
                           user.fullName, user.username, user.email, user.phone, user.accountNumber, user.address, user.nidNo, &user.balance, user.password) == 9) {
                 fprintf(tempFile, "%s,%s,%s,%s,%s,%s,%s,%.2f,%s\n",
@@ -482,7 +552,7 @@ void withdrawMoney(const char* username) {
 
             logTransaction(username, "Withdraw", amount);
 
-            printf("Withdrawal successful! \n");
+            printf("Withdrawal successful!\n");
             return;
         }
     }
@@ -492,6 +562,7 @@ void withdrawMoney(const char* username) {
         printf("User not found.\n");
     }
 }
+
 //withdrawMoney function ends here
 
 
