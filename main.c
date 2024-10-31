@@ -168,7 +168,7 @@ int loginUser(char* loggedInUsername) {
                   user.fullName, user.username, user.email, user.phone, user.accountNumber, user.address, user.nidNo, &user.balance, user.password) == 9) {
         if (strcmp(user.username, username) == 0 && strcmp(user.password, password) == 0) {
             strcpy(loggedInUsername, username);
-            createSession(username, user.phone, password); // Create a session after login
+            createSession(username, user.phone, password);
             fclose(file);
             printf("\nLogin Successful!\n");
             return 1;
